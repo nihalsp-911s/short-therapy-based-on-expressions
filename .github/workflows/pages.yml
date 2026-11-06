@@ -26,7 +26,7 @@ jobs:
       - name: Prepare website
         run: |
           mkdir _site
-          cp index.html style.css app.js logic.js _site/
+          cp index.html style.css app.js logic.js detection.js _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
