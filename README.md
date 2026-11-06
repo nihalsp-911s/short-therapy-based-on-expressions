@@ -24,3 +24,5 @@ In repository Settings → Pages, select **GitHub Actions** as the build source.
 
 ### Detection update
 The core face-api.js 0.22.2 library and tiny-detector/expression weights are now hosted with the site (`vendor/`, `models/`), with the upstream MIT license included. Optional SSD fallback and identity weights still load from upstream GitHub. CPU compatibility mode is the default; restart the camera after toggling it. Predictions have a dedicated display and an explicit confirmation button. A Chromium integration check using the real weights and a public OpenCV sample image as camera input produced a neutral prediction and verified result persistence and camera stop. This does not establish live-device accuracy across expressions.
+
+Version 6 hosts all inference weights locally, exposes processing stages and copyable diagnostics, and includes a local-only photo test. The real-model camera and photo workflows passed Chromium checks with an image fixture. SSD inference on CPU can exceed 20 seconds, so camera processing now permits up to 60 seconds before stopping; progress identifies the slower fallback. Device-specific camera detection remains to be verified.
