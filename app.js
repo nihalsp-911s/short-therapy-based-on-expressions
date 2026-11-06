@@ -5,8 +5,8 @@ try{people=validPeople(JSON.parse(localStorage.getItem('kindspace-faces')||'[]')
 function persist(next){try{localStorage.setItem('kindspace-faces',JSON.stringify(next));people=next;renderPeople();return true;}catch{$('identity').textContent='Could not update storage. Check browser storage permissions.';return false;}}
 function renderPeople(){$('people').replaceChildren();for(const p of people){const row=document.createElement('p');row.textContent=p.name+' ';const b=document.createElement('button');b.className='text';b.textContent='Forget';b.onclick=()=>{if(persist(people.filter(x=>x!==p)))$('identity').textContent='Face deleted.';};row.append(b);$('people').append(row);}}
 renderPeople();for(const mood of Object.keys(messages)){const b=document.createElement('button');b.className='secondary';b.textContent=mood;b.onclick=()=>{$('greeting').textContent='Thanks for checking in.';$('suggestion').textContent=messages[mood];document.querySelectorAll('#moods button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));};$('moods').append(b);}
-async function loadModel(){if(!window.faceapi){await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';s.onload=resolve;s.onerror=()=>{s.remove();reject(Error('Model library could not load.'));};document.head.append(s);});}const root='https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(root),faceapi.nets.faceExpressionNet.loadFromUri(root)]);}
-function stop(){active=false;generation++;latest=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;$('placeholder').hidden=false;$('start').disabled=false;$('stop').disabled=true;$('status').textContent='Camera is off.';}
+async function loadModel(){if(!window.faceapi){await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='./vendor/face-api.js';s.onload=resolve;s.onerror=()=>{s.remove();reject(Error('Model library could not load.'));};document.head.append(s);});}await faceapi.tf.setBackend($('compatibility').checked?'cpu':'webgl');const root='./models';await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(root),faceapi.nets.faceExpressionNet.loadFromUri(root)]);}
+function stop(){active=false;generation++;latest=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;$('placeholder').hidden=false;$('start').disabled=false;$('stop').disabled=true;$('status').textContent='Camera is off.';$('prediction').textContent='Camera stopped.';$('confirm').hidden=true;}
 $('stop').onclick=stop;window.addEventListener('pagehide',stop);
 $('start').onclick=async()=>{const token=++generation;$('start').disabled=true;$('stop').disabled=false;$('status').textContent='Loading expression and recognition models…';try{await Promise.race([loadModel(),new Promise((_,reject)=>setTimeout(()=>reject(Error("Model loading timed out")),45000))]);if(token!==generation)return;const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:15,max:24}},audio:false});if(token!==generation){acquired.getTracks().forEach(t=>t.stop());return;}stream=acquired;$('video').srcObject=stream;await $('video').play();if(token!==generation)return;active=true;$('placeholder').hidden=true;$('status').textContent='Checking your face…';scan(token);}catch(e){if(token!==generation)return;stop();$('status').textContent='Camera or model unavailable. Check permission and internet access, or choose a feeling manually.';}};
 async function scan(token) {
@@ -29,6 +29,7 @@ async function scan(token) {
         'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights');
       if (token !== generation) return;
       latest = null;
+      if(faces.length!==1){$('prediction').textContent='No expression estimate yet.';$('confirm').hidden=true;}
       $('identity').textContent = '';
       if (faces.length === 1) {
         const crops = await faceapi.extractFaces(frame, faces);
@@ -36,6 +37,9 @@ async function scan(token) {
         const expressions = await faceapi.recognizeFaceExpressions(crop);
         if (token !== generation) return;
         const [label, confidence] = Object.entries(expressions).sort((a,b)=>b[1]-a[1])[0];
+        $('prediction').textContent = `Possible expression: ${label} (${Math.round(confidence*100)}%)`;
+        $('confirm').hidden=false;
+        $('confirm').onclick=()=>{$('greeting').textContent='Thanks for checking in.';$('suggestion').textContent=messages[label];};
         $('status').textContent = confidence >= .6
           ? `Possible expression: ${label}. Does that fit? Choose your feeling below.`
           : `Uncertain expression: ${label} (${Math.round(confidence*100)}%). Choose how you feel below.`;

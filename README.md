@@ -21,3 +21,6 @@ Unit tests cover matching and saved-template validation. Real camera accuracy, l
 
 ## Hosted website (GitHub Pages)
 In repository Settings → Pages, select **GitHub Actions** as the build source. The included Deploy Kindspace workflow publishes the site on each push to main; it can also be run manually from Actions. Once deployment succeeds, open https://nihalsp-911s.github.io/short-therapy-based-on-expressions/ . HTTPS supports browser camera permission. Only the website files are deployed, not tests or repository metadata.
+
+### Detection update
+The core face-api.js 0.22.2 library and tiny-detector/expression weights are now hosted with the site (`vendor/`, `models/`), with the upstream MIT license included. Optional SSD fallback and identity weights still load from upstream GitHub. CPU compatibility mode is the default; restart the camera after toggling it. Predictions have a dedicated display and an explicit confirmation button. A Chromium integration check using the real weights and a public OpenCV sample image as camera input produced a neutral prediction and verified result persistence and camera stop. This does not establish live-device accuracy across expressions.
