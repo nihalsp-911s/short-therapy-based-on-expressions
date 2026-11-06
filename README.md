@@ -18,3 +18,6 @@ Camera frames and inference remain in the browser. Optional named 128-number fac
 
 ## Validation limits
 Unit tests cover matching and saved-template validation. Real camera accuracy, lighting, demographic performance, browser permissions, and model downloads require device testing. This is a wellbeing prototype, not therapy, diagnosis, or secure identity verification.
+
+## Hosted website (GitHub Pages)
+In repository Settings → Pages, select **GitHub Actions** as the build source. The included Deploy Kindspace workflow publishes the site on each push to main; it can also be run manually from Actions. Once deployment succeeds, open https://nihalsp-911s.github.io/short-therapy-based-on-expressions/ . HTTPS supports browser camera permission. Only the website files are deployed, not tests or repository metadata.
