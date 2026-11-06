@@ -1,16 +1,19 @@
 import {locateFaces} from './detection.js';
 import {messages,matchFace,validPeople} from './logic.js';
-const $=id=>document.getElementById(id);let stream,active=false,generation=0,latest=null,people=[],breathTimer,gameVersion=0;
+const $=id=>document.getElementById(id);let scanBusy=false; let stream,active=false,generation=0,latest=null,people=[],breathTimer,gameVersion=0;
 try{people=validPeople(JSON.parse(localStorage.getItem('kindspace-faces')||'[]'));}catch{}
 function persist(next){try{localStorage.setItem('kindspace-faces',JSON.stringify(next));people=next;renderPeople();return true;}catch{$('identity').textContent='Could not update storage. Check browser storage permissions.';return false;}}
 function renderPeople(){$('people').replaceChildren();for(const p of people){const row=document.createElement('p');row.textContent=p.name+' ';const b=document.createElement('button');b.className='text';b.textContent='Forget';b.onclick=()=>{if(persist(people.filter(x=>x!==p)))$('identity').textContent='Face deleted.';};row.append(b);$('people').append(row);}}
 renderPeople();for(const mood of Object.keys(messages)){const b=document.createElement('button');b.className='secondary';b.textContent=mood;b.onclick=()=>{$('greeting').textContent='Thanks for checking in.';$('suggestion').textContent=messages[mood];document.querySelectorAll('#moods button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));};$('moods').append(b);}
-async function loadModel(){if(!window.faceapi){await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';s.onload=resolve;s.onerror=()=>{s.remove();reject(Error('Model library could not load.'));};document.head.append(s);});}const root='https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(root),faceapi.nets.faceLandmark68Net.loadFromUri(root),faceapi.nets.faceRecognitionNet.loadFromUri(root),faceapi.nets.faceExpressionNet.loadFromUri(root)]);}
+async function loadModel(){if(!window.faceapi){await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';s.onload=resolve;s.onerror=()=>{s.remove();reject(Error('Model library could not load.'));};document.head.append(s);});}const root='https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(root),faceapi.nets.faceExpressionNet.loadFromUri(root)]);}
 function stop(){active=false;generation++;latest=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;$('placeholder').hidden=false;$('start').disabled=false;$('stop').disabled=true;$('status').textContent='Camera is off.';}
 $('stop').onclick=stop;window.addEventListener('pagehide',stop);
-$('start').onclick=async()=>{const token=++generation;$('start').disabled=true;$('stop').disabled=false;$('status').textContent='Loading expression and recognition models…';try{await loadModel();if(token!==generation)return;const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});if(token!==generation){acquired.getTracks().forEach(t=>t.stop());return;}stream=acquired;$('video').srcObject=stream;await $('video').play();if(token!==generation)return;active=true;$('placeholder').hidden=true;scan(token);}catch(e){if(token!==generation)return;stop();$('status').textContent='Camera or model unavailable. Check permission and internet access, or choose a feeling manually.';}};
+$('start').onclick=async()=>{const token=++generation;$('start').disabled=true;$('stop').disabled=false;$('status').textContent='Loading expression and recognition models…';try{await Promise.race([loadModel(),new Promise((_,reject)=>setTimeout(()=>reject(Error("Model loading timed out")),45000))]);if(token!==generation)return;const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:15,max:24}},audio:false});if(token!==generation){acquired.getTracks().forEach(t=>t.stop());return;}stream=acquired;$('video').srcObject=stream;await $('video').play();if(token!==generation)return;active=true;$('placeholder').hidden=true;$('status').textContent='Checking your face…';scan(token);}catch(e){if(token!==generation)return;stop();$('status').textContent='Camera or model unavailable. Check permission and internet access, or choose a feeling manually.';}};
 async function scan(token) {
   if (!active || token !== generation) return;
+  if(scanBusy){setTimeout(()=>scan(token),500);return;}
+  scanBusy=true;
+  const watchdog=setTimeout(()=>{if(token===generation){stop();$('status').textContent='Processing took too long. Camera stopped. Try restarting or use a manual check-in.';}},20000);
   try {
     const video = $('video');
     if (video.readyState < 2 || !video.videoWidth) {
@@ -18,17 +21,16 @@ async function scan(token) {
     } else {
       // Snapshot the actual camera pixels at their native dimensions.
       const frame = document.createElement('canvas');
-      frame.width = video.videoWidth;
-      frame.height = video.videoHeight;
-      frame.getContext('2d').drawImage(video, 0, 0);
-      $('status').textContent = 'Checking your face…';
+      const scale=Math.min(1,480/video.videoWidth);
+      frame.width = Math.round(video.videoWidth*scale);
+      frame.height = Math.round(video.videoHeight*scale);
+      frame.getContext('2d').drawImage(video, 0, 0, frame.width, frame.height);
       const faces = await locateFaces(faceapi, frame,
         'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights');
       if (token !== generation) return;
       latest = null;
       $('identity').textContent = '';
       if (faces.length === 1) {
-        $('status').textContent = 'Face found. Reading expression…';
         const crops = await faceapi.extractFaces(frame, faces);
         const crop = crops[0];
         const expressions = await faceapi.recognizeFaceExpressions(crop);
@@ -36,8 +38,11 @@ async function scan(token) {
         const [label, confidence] = Object.entries(expressions).sort((a,b)=>b[1]-a[1])[0];
         $('status').textContent = confidence >= .6
           ? `Possible expression: ${label}. Does that fit? Choose your feeling below.`
-          : 'Face found; expression uncertain. Choose your feeling below.';
-        try {
+          : `Uncertain expression: ${label} (${Math.round(confidence*100)}%). Choose how you feel below.`;
+        if(people.length || $('consent').checked) try {
+          const root='https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+          await Promise.all([faceapi.nets.faceLandmark68Net.isLoaded?null:faceapi.nets.faceLandmark68Net.loadFromUri(root),faceapi.nets.faceRecognitionNet.isLoaded?null:faceapi.nets.faceRecognitionNet.loadFromUri(root)]);
+          if(token!==generation)return;
           const landmarks = await faceapi.detectFaceLandmarks(crop);
           const aligned = await faceapi.extractFaces(crop, [landmarks.align()]);
           const descriptor = await faceapi.computeFaceDescriptor(aligned[0]);
@@ -61,7 +66,8 @@ async function scan(token) {
     $('status').textContent = 'Face processing failed. Check your connection and restart the camera.';
     console.error('Face processing failed:', error);
   }
-  if (active && token === generation) setTimeout(()=>scan(token), 800);
+  finally {clearTimeout(watchdog);scanBusy=false;}
+  if (active && token === generation) setTimeout(()=>scan(token), 1200);
 }
 $('save').onclick=()=>{const name=$('name').value.trim();if(!$('consent').checked||!name){$('identity').textContent='Enter your name and agree to save your face first.';return;}if(!active||!latest||Date.now()-latest.time>2500){$('identity').textContent='Start the camera and keep one face clearly in view.';return;}if(people.length>=20){$('identity').textContent='Limit reached. Delete a saved face first.';return;}if(persist([...people.filter(p=>p.name!==name),{name,descriptor:Array.from(latest.face.descriptor)}])){$('identity').textContent='Saved on this browser.';$('consent').checked=false;}};
 $('delete').onclick=()=>{if(persist([]))$('identity').textContent='All saved faces deleted.';};

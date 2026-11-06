@@ -9,15 +9,16 @@ function mock(results) {
  return {api,calls};
 }
 test('uses stronger detector when tiny detector misses a face',async()=>{
- const {api,calls}=mock([[],[{score:.8}]]);
+ const {api,calls}=mock([[],[],[],[],[],[{score:.8}]]);
+ for(let i=0;i<4;i++)assert.equal((await locateFaces(api,{},'models')).length,0);
  assert.equal((await locateFaces(api,{},'models')).length,1);
- assert.equal(calls[1],'load');assert.equal(calls[2],api.SsdMobilenetv1Options);
+ assert.equal(calls[5],'load');assert.equal(calls[6],api.SsdMobilenetv1Options);
 });
 test('does not download fallback when tiny detector succeeds',async()=>{
  const {api,calls}=mock([[{score:.8}]]);
  assert.equal((await locateFaces(api,{},'models')).length,1);assert.equal(calls.length,1);
 });
 test('preserves multiple faces for enrollment safety',async()=>{
- const {api}=mock([[],[{score:.8},{score:.7}]]);
+ const {api}=mock([[{score:.8},{score:.7}]]);
  assert.equal((await locateFaces(api,{},'models')).length,2);
 });
