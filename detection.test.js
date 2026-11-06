@@ -8,11 +8,10 @@ function mock(results) {
  async detectAllFaces(frame,options){calls.push(options.constructor);return results.shift();}};
  return {api,calls};
 }
-test('uses stronger detector when tiny detector misses a face',async()=>{
- const {api,calls}=mock([[],[],[],[],[],[{score:.8}]]);
- for(let i=0;i<4;i++)assert.equal((await locateFaces(api,{},'models')).length,0);
- assert.equal((await locateFaces(api,{},'models')).length,1);
- assert.equal(calls[5],'load');assert.equal(calls[6],api.SsdMobilenetv1Options);
+test('repeated misses never trigger a heavy live detector or download',async()=>{
+ const {api,calls}=mock(Array.from({length:20},()=>[]));
+ for(let i=0;i<20;i++)assert.equal((await locateFaces(api,{})).length,0);
+ assert.equal(calls.length,20);assert.ok(calls.every(x=>x===api.TinyFaceDetectorOptions));
 });
 test('does not download fallback when tiny detector succeeds',async()=>{
  const {api,calls}=mock([[{score:.8}]]);
